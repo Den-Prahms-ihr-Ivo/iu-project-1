@@ -8,7 +8,7 @@ version = "0.0.1"
 authors = [
   { name="Ivo Prahm", email="ivo@ivolino.de" },
 ]
-description = "Written Assignment for the Python Course"
+description = "Written Assignment for Course: DLMDSPWP01 - Programming with Python"
 readme = "README.md"
 requires-python = ">=3.8"
 classifiers = [

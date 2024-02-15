@@ -6,6 +6,8 @@ name = "pypi"
 [packages]
 nox = "*"
 black = "*"
+sqlalchemy = "*"
+pandas = "*"
 
 [dev-packages]
 pytest = "*"
