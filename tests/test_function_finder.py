@@ -1,5 +1,6 @@
 import pandas as pd
 
+from pathlib import Path
 from src.iu_project_1 import function_finder
 
 
@@ -67,3 +68,51 @@ def test_function_finder_get_best_functions():
     nina = nina[0]
     assert nina["train_y"] == 1
     assert nina["best_ideal_y"] == 2
+
+
+def test_function_finder_test_multiple_test_functions():
+    """
+    Bitches
+    """
+
+    train_df = pd.DataFrame(
+        [[1, 2, 3], [2, 2, 3], [3, 2, 3], [4, 2, 3]],
+        columns=["x", "y1", "y2"],
+    )
+    ideal_df = pd.DataFrame(
+        [[1, 1, 2, 3.1], [2, 1, 2, 3.3], [3, 1, 2, 3.0], [4, 1, 2, 3.2]],
+        columns=["x", "y1", "y2", "y3"],
+    )
+    print()
+    ff = function_finder.Function_Finder(train_set=train_df, ideal_set=ideal_df)
+
+    nina = ff.get_best_function()
+
+    assert len(nina) == 2
+
+    assert nina[0]["train_y"] == 1
+    assert nina[0]["best_ideal_y"] == 2
+    assert nina[1]["train_y"] == 2
+    assert nina[1]["best_ideal_y"] == 3
+
+    print(nina)
+
+
+def test_read_csv():
+    p = Path.cwd()
+    train_path = p / "tests" / "data" / "simple_train.csv"
+    ideal_path = p / "tests" / "data" / "simple_ideal.csv"
+
+    ff = function_finder.Function_Finder(train_set=train_path, ideal_set=ideal_path)
+
+    nina = ff.get_best_function()
+
+    assert len(nina) == 3
+
+    assert nina[0]["train_y"] == 1
+    assert nina[0]["best_ideal_y"] == 1
+    assert nina[1]["train_y"] == 2
+    assert nina[1]["best_ideal_y"] == 6
+    assert nina[2]["train_y"] == 3
+    assert nina[2]["best_ideal_y"] == 8
+    # ff = function_finder.Function_Finder(train_set=train_df, ideal_set=ideal_df)

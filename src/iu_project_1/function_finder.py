@@ -4,7 +4,7 @@ popo
 
 from pathlib import Path
 from abc import ABC, abstractmethod
-from typing import List, Dict, Literal, Optional
+from typing import List, Dict, Literal, Optional, Union
 from src.iu_project_1.custom_exceptions import InvalidCallOrder, InvalidDataFrame
 
 import pandas as pd
@@ -54,10 +54,20 @@ class Function_Finder:
     __ideal_df: Optional[pd.DataFrame] = None
     __merged_df: Optional[pd.DataFrame] = None
 
-    def __init__(self):
-        # TODO: man soll es auch initialisieren können aber optional
-        self.__train_df = None
-        self.__ideal_df = None
+    def __init__(
+        self,
+        train_set: Union[None, pd.DataFrame, Path] = None,
+        ideal_set: Union[None, pd.DataFrame, Path] = None,
+    ):
+        if isinstance(train_set, Path):
+            self.train_set = self._load_csv(train_set)
+        else:
+            self.train_set = train_set
+
+        if isinstance(ideal_set, Path):
+            self.ideal_set = self._load_csv(ideal_set)
+        else:
+            self.ideal_set = ideal_set
 
     @property
     def train_set(self) -> pd.DataFrame:
@@ -68,6 +78,9 @@ class Function_Finder:
 
     @train_set.setter
     def train_set(self, df: pd.DataFrame) -> None:
+        if df is None:
+            return
+
         self.__train_df = df
         # TODO: sanity checks und so weiter
         # und mergen etc
@@ -84,6 +97,9 @@ class Function_Finder:
 
     @ideal_set.setter
     def ideal_set(self, df: pd.DataFrame) -> None:
+        if df is None:
+            return
+
         if len([c for c in df.columns if re.search(r"^IDEAL_y\d+$", c)]) < 1:
             df = df.add_prefix("IDEAL_")
 
@@ -93,6 +109,16 @@ class Function_Finder:
 
         if self.__train_df is not None:
             self._merge_dfs(left=self.__train_df, right=self.__ideal_df)
+
+    def _load_csv(self, file_path: Path) -> pd.DataFrame:
+        if not file_path.is_file():
+            raise FileNotFoundError
+
+        if not file_path.suffix == ".csv":
+            print(file_path.suffix)
+            raise FileNotFoundError
+
+        return pd.read_csv(file_path)
 
     def _merge_dfs(self, left: pd.DataFrame, right: pd.DataFrame) -> None:
         self.__merged_df = pd.merge(
