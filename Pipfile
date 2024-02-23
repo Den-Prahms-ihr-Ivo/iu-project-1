@@ -8,6 +8,8 @@ nox = "*"
 black = "*"
 sqlalchemy = "*"
 pandas = "*"
+pandas-stubs = "*"
+pyarrow = "*"
 
 [dev-packages]
 pytest = "*"
