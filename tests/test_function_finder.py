@@ -115,4 +115,34 @@ def test_read_csv():
     assert nina[1]["best_ideal_y"] == 6
     assert nina[2]["train_y"] == 3
     assert nina[2]["best_ideal_y"] == 8
-    # ff = function_finder.Function_Finder(train_set=train_df, ideal_set=ideal_df)
+
+
+def test_plot_best_function():
+    """
+    Bitches
+    """
+
+    train_df = pd.DataFrame(
+        [[2, 4], [3, 5], [5, 7], [7, 10], [9, 15]],
+        columns=["x", "y1"],
+    )
+    ideal_df = pd.DataFrame(
+        [[2, 4.1], [3, 4.8], [5, 7.4], [7, 10.01], [9, 15.345]],
+        columns=["x", "y1"],
+    )
+
+    p = Path.cwd()
+    train_path = p / "data" / "train.csv"
+    ideal_path = p / "data" / "ideal.csv"
+    test_path = p / "data" / "test.csv"
+
+    print()
+    ff = function_finder.Function_Finder(
+        train_set=train_path, ideal_set=ideal_path, test_set=test_path
+    )
+
+    nina = ff.get_best_function()
+    ff.compare_functions(Path.cwd() / "tests" / "plots" / "popo.png")
+    ff.plot_alpha(Path.cwd() / "tests" / "plots")
+
+    print(nina)
