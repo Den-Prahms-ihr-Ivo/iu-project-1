@@ -58,7 +58,7 @@ def test_function_finder_get_best_functions():
 
     # Initialize the Function Finder Class
     # It is possible to pass the dataframes directly or set them later
-    ff = function_finder.Function_Finder()
+    ff = function_finder.FunctionFinder()
     ff.ideal_set = ideal_df
     ff.train_set = train_df
 
@@ -84,7 +84,7 @@ def test_function_finder_test_multiple_test_functions():
         columns=["x", "y1", "y2", "y3"],
     )
     print()
-    ff = function_finder.Function_Finder(train_set=train_df, ideal_set=ideal_df)
+    ff = function_finder.FunctionFinder(train_set=train_df, ideal_set=ideal_df)
 
     nina = ff.get_best_function()
 
@@ -103,7 +103,7 @@ def test_read_csv():
     train_path = p / "tests" / "data" / "simple_train.csv"
     ideal_path = p / "tests" / "data" / "simple_ideal.csv"
 
-    ff = function_finder.Function_Finder(train_set=train_path, ideal_set=ideal_path)
+    ff = function_finder.FunctionFinder(train_set=train_path, ideal_set=ideal_path)
 
     nina = ff.get_best_function()
 
@@ -115,6 +115,10 @@ def test_read_csv():
     assert nina[1]["best_ideal_y"] == 6
     assert nina[2]["train_y"] == 3
     assert nina[2]["best_ideal_y"] == 8
+
+
+# TODO: !!!
+# Mehr gute Tests für test.csv
 
 
 def test_plot_best_function():
@@ -136,13 +140,8 @@ def test_plot_best_function():
     ideal_path = p / "data" / "ideal.csv"
     test_path = p / "data" / "test.csv"
 
-    print()
-    ff = function_finder.Function_Finder(
+    ff = function_finder.FunctionFinder(
         train_set=train_path, ideal_set=ideal_path, test_set=test_path
     )
 
-    nina = ff.get_best_function()
-    ff.compare_functions(Path.cwd() / "tests" / "plots" / "popo.png")
-    ff.plot_alpha(Path.cwd() / "tests" / "plots")
-
-    print(nina)
+    ff.plot_functions(Path.cwd() / "tests" / "plots")

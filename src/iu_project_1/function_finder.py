@@ -4,10 +4,11 @@ popo
 
 from pathlib import Path
 from abc import ABC, abstractmethod
-from typing import List, Dict, Literal, Optional, Union
+from typing import List, Dict, Literal, Optional, Union, Any, Tuple
 from src.iu_project_1.custom_exceptions import InvalidCallOrder, InvalidDataFrame
 from enum import Enum
 from math import sqrt
+from numpy.typing import ArrayLike
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -27,43 +28,32 @@ class Colors(Enum):
     TEXT = "#282119"
 
 
-class DataAccess(ABC):
+class FunctionFinderBaseClass(ABC):
     """
-    abstrakte KLasse ggf mit
-    read csv
-    safe to sql
-    irgendwelche Compare funktionen?!
-    Dann noch draw funktionen --> diese könntest ändern in der Vererbung.
-        das wäre die einzige Abstrakte funktion.
+    Since we have to use inheritance, and I feel like the SQLAlchemy inheritance
+    is cheating and I din't have a better idea, I just define all the outgoing
+    interface functions in the base class.
     """
 
     @abstractmethod
-    def load(self, file_path: Path, sep: str = ",") -> pd.DataFrame:
+    def get_best_function(
+        self,
+    ) -> List[Dict[Literal["train_y", "best_ideal_y"], int]]:
         """
-        asd
+        TODO
+        """
+
+    @abstractmethod
+    def plot_functions(self, save_path: Path) -> None:
+        """
+        TODO
         """
 
 
-class CSV(DataAccess):
+class FunctionFinder(FunctionFinderBaseClass):
     """
-    asd
+    TODO
     """
-
-    def load(self, file_path: Path, sep: str = ",") -> pd.DataFrame:
-        if not file_path.is_file():
-            raise FileNotFoundError
-
-        if not file_path.suffix == ".csv":
-            print(file_path.suffix)
-            print("POPO!!")
-            raise FileNotFoundError
-
-        tim = pd.read_csv(file_path, sep=sep)
-
-        return tim
-
-
-class Function_Finder:
 
     __train_df: Optional[pd.DataFrame] = None
     __ideal_df: Optional[pd.DataFrame] = None
@@ -77,6 +67,8 @@ class Function_Finder:
         ideal_set: Union[None, pd.DataFrame, Path] = None,
         test_set: Union[None, pd.DataFrame, Path] = None,
     ):
+        super(FunctionFinder, self).__init__()
+
         if isinstance(train_set, Path):
             self.train_set = self._load_csv(train_set)
         else:
@@ -171,7 +163,6 @@ class Function_Finder:
         ).drop(columns="IDEAL_x")
 
         self.get_best_function()
-        # TODO: merge mit
 
     def get_best_function(self) -> List[Dict[Literal["train_y", "best_ideal_y"], int]]:
         """
@@ -237,10 +228,16 @@ class Function_Finder:
 
         return nina
 
-    def _calculate_test_scores(self):
+    def _calculate_test_scores(self) -> None:
+        """
+        Polulates the class-scoped dict __merged_df with the test scores
+        and decides for every test entry whether it is mappable to any of
+        the ideal functions.
+        """
         if self.__test_df is None:
             return
 
+        # first the test set is merged into our internal merged_df
         self.__merged_df = pd.merge(
             left=self.__merged_df,
             right=self.__test_df,
@@ -249,8 +246,7 @@ class Function_Finder:
             right_on="TEST_x",
         )
 
-        # Für jeden Eintrag in self.__ideal_dict max deviation berechnen.
-        # dann berechnen überall wo gemapped werden kann.
+        # Calculate the max deviation for every entry from the internal __ideal_dict
         for ideal in self.__ideal_dict:
             maximum_regression_train_to_ideal = (
                 self.__merged_df[f"y{ideal['train_y']}"]
@@ -258,8 +254,8 @@ class Function_Finder:
             ).max()
 
             cut_off_value = sqrt(2)
-            # Jetzt habe ich das maximum.
-            # Jetzt
+
+            # Save the deviation between the test y value and the ideal y value
             self.__merged_df[
                 f"deviation_Train_{ideal['train_y']}_IDEAL_{ideal['best_ideal_y']}"
             ] = self.__merged_df.apply(
@@ -267,6 +263,8 @@ class Function_Finder:
                 axis=1,
             )
 
+            # Now we save the a boolean value whether the deviation is greater than
+            # our cut_off value.
             self.__merged_df[
                 f"mappable_to_Train_{ideal['train_y']}_IDEAL_{ideal['best_ideal_y']}"
             ] = self.__merged_df.apply(
@@ -280,32 +278,54 @@ class Function_Finder:
                 axis=1,
             )
 
-    def _fit_polynomial(self, x, y, degree=1):
-        print(x)
-        print(x[-1])
-        tim = np.polynomial.polynomial.polyfit(x, y, degree)
+    def _fit_polynomial(
+        self, x: ArrayLike, y: ArrayLike, degree: int = 1
+    ) -> Tuple[ArrayLike, ArrayLike, ArrayLike]:
+        """
+        Takes x and y values and fits a polynomial of the given degree to it.
 
+        :param x: x values
+        :param y: y values
+        :param degree: The degree of the fitted polynomial
+        :return (x: np.array, y: np.array, fx: np.array)
+        np arrays of new interpolated x and y points, aswell as the function-value of
+        the newly interpolated points at the given x values to draw nicer errors later.
+        """
+        # polifit gives us the coefficients of a fitting polynomial of the given degree.
+        nina = np.polynomial.polynomial.polyfit(x, y, degree)
+
+        # gives uns evenly spaced samples
         poly_plot_x = np.linspace(x[0], x[-1], num=len(x) * 10)
 
         fx = []
         poly_plot_y = []
 
+        # the function value for every sample is calculated
+        # A little bit overdone, since I ended up only using a degree of 1.
         for i in poly_plot_x:
             pol = 0
             for n in range(degree + 1):
-                pol += tim[n] * i**n
-            poly_plot_y.append(pol)  # tim[0] + tim[1] * i + tim[2] * i**2)
+                pol += nina[n] * i**n
+            poly_plot_y.append(pol)
 
+        # The same thing for every x value
         for i in x:
             pol = 0
             for n in range(degree + 1):
-                pol += tim[n] * i**n
-            fx.append(pol)  # tim[0] + tim[1] * i + tim[2] * i**2)
+                pol += nina[n] * i**n
+            fx.append(pol)
 
         return poly_plot_x, poly_plot_y, fx
 
-    def plot_errors(self, ax, x, fx, y):
+    def plot_errors(self, ax: Any, x: ArrayLike, fx: ArrayLike, y: ArrayLike) -> None:
+        """
+        Draws error lines between an actual and ideal value for an array of predeictions
 
+        :param ax: matplotlib subplot to draw the error-lines in.
+        :param x: x values
+        :param y: actual value
+        :param fx: ideal value
+        """
         for i, _ in enumerate(x):
             ax.plot(
                 [x[i], x[i]],
@@ -315,76 +335,58 @@ class Function_Finder:
                 alpha=0.9,
                 zorder=0,
             )
-            # plt.text(x[i] + 0.1, y[i] + 0.2, f"Error {fx[i]- y[i]}")
 
-    def _draw_polynomial(self, x, y):
-        pass
+    def plot_functions(self, save_path: Path) -> None:
+        """
+        This function visualizes the assignment.
 
-    def compare_functions(self, save_path: Path):
-        if self.__ideal_dict is None:
-            if self.__ideal_df is not None and self.__train_df is not None:
-                if self.__merged_df is None:
-                    self._merge_dfs(left=self.__train_df, right=self.__ideal_df)
-                self.get_best_function()
-            else:
-                raise InvalidCallOrder("Please set a Training and Ideal Set first.")
+        :param save_path: The base path where the plots are to be saved.
 
-        # TODO: hier musst du noch weiter machen mit deinem __ideal_dict
-
-        x = self.__merged_df["x"].values[-40:]
-        y = self.__merged_df["y1"].values[-40:]  # train
-        y_2 = self.__merged_df["y2"].values[-40:]  # train
-
-        y_ideal = self.__merged_df["IDEAL_y42"].values[-40:]
-
-        colors = np.random.rand(len(x))
-        # x, fx = self._fit_polynomial(x_scadder, y_scadder, degree=degree)
-        # self.plot_errors(x, fx, y_scadder)
-
-        degree = 1
-
-        # TODO: In Funtion auslagern:
-
-        plt.figure(facecolor="#eeeeee")
-        ax = plt.axes()
-        ax.set_facecolor("#eeeeee")
-
-        # self._draw_polynomial(x=,y=, degree=1, compare_y=None)
-        # _, _, fx = self._fit_polynomial(x, y_2, degree=degree)
-        # ax.plot(x, fx)
-
-        poly_plot_x, poly_plot_y, fx = self._fit_polynomial(x, y_ideal, degree=degree)
-        # plt.plot(x, fx)
-        self.plot_errors(ax, x, fx, y)
-        ax.plot(x, fx)
-        ax.plot(poly_plot_x, poly_plot_y, color=Colors.LIGHT.value, label="Penis")
-
-        ax.scatter(x, y, c="#0c3b2e", zorder=100, label="Popo")
-
-        ax.legend()
-
-        plt.savefig(save_path)
-
-    def plot_alpha(self, save_path):
-        if self.__ideal_dict is None or self.train_set is None:
+        If the necessary sets are not set, an Exception is thrown.
+        Necessary are Train, Test and Ideal Set.
+        """
+        if (
+            # self.__ideal_dict is None er
+            self.train_set is None
+            or self.test_set is None
+            or self.ideal_set is None
+        ):
             raise InvalidCallOrder("Please set a Train, Ideal and Test Set first.")
 
+        # It is important, that the function "get_best_function" was called
+        # before we continue further. If this functino was called the collumn
+        # "TEST_xy" can be found in the merged DataFrame.
+        if (
+            len([c for c in self.__merged_df.columns if re.search(r"^TEST_y\d+$", c)])
+            < 1
+        ):
+            self.get_best_function()
+
+        ###############################################################
+        # First Plot
+        ###############################################################
+        # Here beginns the heart of the function
+        # We iterate over the previously calculated ideal functions.
+        # The dict has the form: List[Dict[Literal['train_y', 'best_ideal_y'], int]]
+        # Every Training Function is mapped to its calculated ideal function.
         for f in self.__ideal_dict:
-            # TODO: hier musst du noch weiter machen mit deinem __ideal_dict
-
+            # numpy array of the all x values
             x = self.__merged_df["x"].values
-            y = self.__merged_df[f"y{f['train_y']}"].values  # train
-
+            # numpy arrays of the respectiv training y-data and the corresponding ideal y
+            y = self.__merged_df[f"y{f['train_y']}"].values
             y_ideal = self.__merged_df[f"IDEAL_y{f['best_ideal_y']}"].values
 
             fig, axs = plt.subplots(2, 1, figsize=(6, 6))
 
             fig.set_facecolor(Colors.BACKGROUND.value)
+            fig.suptitle(f"Trainings-Set #{f['train_y']}", fontsize=16)
 
-            poly_plot_x, poly_plot_y, fx = self._fit_polynomial(x, y_ideal, degree=1)
-            # plt.plot(x, fx)
+            # In this function the ideal data is interpolated to draw a nicer Line
+            # and visualize the errors nicer.
+            poly_plot_x, poly_plot_y, _ = self._fit_polynomial(x, y_ideal, degree=1)
 
-            axs[0].plot(x, fx)
+            # axs[0].plot(x, fx)
+            # Plotting the interpolated ideal function to get a nice line
             axs[0].plot(
                 poly_plot_x,
                 poly_plot_y,
@@ -394,16 +396,20 @@ class Function_Finder:
                 zorder=2,
             )
 
+            # plotting all training data points.
             axs[0].scatter(
                 x,
                 y,
                 c=Colors.HIGHLIGHT_2.value,
                 alpha=0.5,
-                s=2.5,
+                s=4,
                 zorder=1,
                 label=f"training data$_{f['train_y']}$",
             )
 
+            # this is just to draw the edges in the same color
+            # Earlier I experimented with some wilder colors and the
+            # black borders looked awful. :)
             for j in range(2):
                 axs[j].tick_params(
                     color=Colors.TEXT.value, labelcolor=Colors.TEXT.value
@@ -419,103 +425,85 @@ class Function_Finder:
             axs[0].set_ylabel("y", color=Colors.TEXT.value)
             axs[0].legend()
 
-            # ZOOMED IN
+            ###############################################################
+            # Zoomed-in Plot
+            ###############################################################
+            # I thought it would be neat to see a zoomed-in view of the training data, its ideal
+            # function and the respective error
+            # Firstly the first x-index, with its corresponding y value in a particular margin
+            # around 0, is selected. Just because I thought it would be nicer to zoom in here.
             x_i = np.where(abs(y - 0.5) < 1)[0]
 
             zoomed_in_view_value_count = 20
 
+            # Select only the values in that particular interval.
             x = x[x_i[0] : x_i[0] + zoomed_in_view_value_count]
             y = y[x_i[0] : x_i[0] + zoomed_in_view_value_count]
-
             y_ideal = y_ideal[x_i[0] : x_i[0] + zoomed_in_view_value_count]
+
+            # Again the interpolation. This time we use the third value.
+            # Since I thought I couldn't be certain, that I always have a corresponding
+            # ideal y value that is exactly on the interpolated line, I just calculated
+            # the respective y value for every x to draw the error-lines in the next line.
             poly_plot_x, poly_plot_y, fx = self._fit_polynomial(x, y_ideal, degree=1)
-            # plt.plot(x, fx)
+
             self.plot_errors(axs[1], x, fx, y)
             axs[1].set_title(
                 f"zoomed-in view to {zoomed_in_view_value_count} values around $y=0$"
             )
             axs[1].set_xlabel("x", color=Colors.TEXT.value)
             axs[1].set_ylabel("y", color=Colors.TEXT.value)
-            axs[1].plot(x, fx)
+            # axs[1].plot(x, fx)
             axs[1].plot(poly_plot_x, poly_plot_y, color=Colors.HIGHLIGHT.value)
 
-            # TODO: Hier nur das richtige auswählen!!
-            if self.__test_df is not None:
+            ###############################################################
+            # Plotting the Test Data
+            ###############################################################
+            # Selector for the correct column
+            mappapble_string = (
+                f"mappable_to_Train_{f['train_y']}_IDEAL_{f['best_ideal_y']}"
+            )
 
-                # mappapble_string = f"mappable_to_Train_{ideal['train_y']}_IDEAL_{ideal['best_ideal_y']}"
-                mappapble_string = (
-                    f"mappable_to_Train_{f['train_y']}_IDEAL_{f['best_ideal_y']}"
-                )
+            # Since we only have a few test values, only the non null rows are selected
+            tmp = self.__merged_df.loc[self.__merged_df["TEST_y"].notnull()]
+            # numpy array for the color mapping.
+            col = [
+                Colors.MAPABLE.value if x else Colors.NOT_MAPABLE.value
+                for x in tmp[mappapble_string].values
+            ]
 
-                tmp = self.__merged_df.loc[self.__merged_df["TEST_y"].notnull()]
-                col = [
-                    Colors.MAPABLE.value if x else Colors.NOT_MAPABLE.value
-                    for x in tmp[mappapble_string].values
-                ]
+            # Plotting all test values in the first plot.
+            # And coloring them according to their "mappability" to the resperctive function.
+            axs[0].scatter(x=tmp["x"], y=tmp["TEST_y"], color=col, alpha=0.5)
 
-                axs[0].scatter(x=tmp["x"], y=tmp["TEST_y"], color=col, alpha=0.5)
+            # Now select only the test data that fits in the selected zoomed-in interval
+            tmp = tmp.loc[(tmp["x"] < x.max()) & (tmp["x"] > x.min())]
+            tmp = tmp.loc[(tmp["TEST_y"] < y.max()) & (tmp["TEST_y"] > y.min())]
 
-                tmp = tmp.loc[(tmp["x"] < x.max()) & (tmp["x"] > x.min())]
-                print("OHOO")
-                print(tmp)
-                tmp = tmp.loc[(tmp["TEST_y"] < y.max()) & (tmp["TEST_y"] > y.min())]
-                print(tmp)
-                mappable = tmp.loc[tmp[mappapble_string]]
+            # Since I didn't find a way to map different colors and different labes
+            # to the same scatter plot, I had to draw it seperately
+            mappable = tmp.loc[tmp[mappapble_string]]
+            n_mappable = tmp.loc[~tmp[mappapble_string]]
 
-                n_mappable = tmp.loc[~tmp[mappapble_string]]
+            axs[1].scatter(
+                x=mappable["x"],
+                y=mappable["TEST_y"],
+                color=Colors.MAPABLE.value,
+                label=f"mappable to $f_{{ {f['best_ideal_y']} }}$",
+                alpha=0.5,
+            )
+            axs[1].scatter(
+                x=n_mappable["x"],
+                y=n_mappable["TEST_y"],
+                color=Colors.NOT_MAPABLE.value,
+                label=f"not mappable to $f_{{ {f['best_ideal_y']} }}$",
+                alpha=0.5,
+            )
 
-                axs[1].scatter(
-                    x=mappable["x"],
-                    y=mappable["TEST_y"],
-                    color=Colors.MAPABLE.value,
-                    label=f"mappable to $f_{{ {f['best_ideal_y']} }}$",
-                    alpha=0.5,
-                )
-                axs[1].scatter(
-                    x=n_mappable["x"],
-                    y=n_mappable["TEST_y"],
-                    color=Colors.NOT_MAPABLE.value,
-                    label=f"not mappable to $f_{{ {f['best_ideal_y']} }}$",
-                    alpha=0.5,
-                )
-
-            # ##############
-
+            # Training Data
             axs[1].scatter(
                 x, y, c=Colors.HIGHLIGHT_2.value, zorder=100, label="training data"
             )
             axs[1].legend()
             fig.tight_layout()
             plt.savefig(save_path / f"T_{f['train_y']}-f_{f['best_ideal_y']}.png")
-
-    def plot_best_functions(self, safe_path: Path) -> None:
-        x_scadder = self.__merged_df["x"].values[10:20]
-        # y_scadder = self.__merged_df["r_1_squared,y=1"].values
-        y_scadder = self.__merged_df["y3"].values[10:20]
-        # y_scadder = self.__merged_df["IDEAL_y42"].values[10:20]
-        colors = np.random.rand(len(x_scadder))
-
-        # print(self.__merged_df["r_1_squared,y=1"].values)
-        degree = 1
-
-        # x, fx = self._fit_polynomial(x_scadder, y_scadder, degree=degree)
-        # self.plot_errors(x, fx, y_scadder)
-
-        x, fx = self._fit_polynomial(
-            x_scadder, y_scadder, degree=degree, num=len(y_scadder) * 10
-        )
-        plt.plot(x, fx)
-
-        # plt.plot(dates, values, ".r-")
-        # plt.ylim((-1, 1))
-
-        plt.scatter(x_scadder, y_scadder, c=colors, alpha=0.5)
-        plt.savefig(safe_path)
-
-
-if __name__ == "__main__":
-    csv = CSV()
-    train_df = csv.load(Path("data/train.csv"))
-    ideal_df = csv.load(Path("data/ideal.csv"))
-
-    print("PENIS")
