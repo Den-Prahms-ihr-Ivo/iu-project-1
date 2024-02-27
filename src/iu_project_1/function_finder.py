@@ -23,7 +23,9 @@ class Colors(Enum):
     HIGHLIGHT_2 = "#567c57"  # "#294122"
     HIGHLIGHT_3 = "#dd9c7c"  # "#ffba00"
     MAPABLE = "#449aed"
+    MAPABLE_LIGHT = "#add8e6"
     NOT_MAPABLE = "#d24d49"
+    NOT_MAPABLE_LIGHT = "#ff7f7f"
     DARK = "#162114"
     TEXT = "#282119"
 
@@ -376,7 +378,12 @@ class FunctionFinder(FunctionFinderBaseClass):
             y = self.__merged_df[f"y{f['train_y']}"].values
             y_ideal = self.__merged_df[f"IDEAL_y{f['best_ideal_y']}"].values
 
-            fig, axs = plt.subplots(2, 1, figsize=(6, 6))
+            fig, axd = plt.subplot_mosaic(
+                [["upper left", "right"], ["lower left", "right"]],
+                figsize=(8, 8),
+                gridspec_kw={"width_ratios": [2, 1], "height_ratios": [1, 1]},
+                layout="tight",
+            )
 
             fig.set_facecolor(Colors.BACKGROUND.value)
             fig.suptitle(f"Trainings-Set #{f['train_y']}", fontsize=16)
@@ -385,9 +392,9 @@ class FunctionFinder(FunctionFinderBaseClass):
             # and visualize the errors nicer.
             poly_plot_x, poly_plot_y, _ = self._fit_polynomial(x, y_ideal, degree=1)
 
-            # axs[0].plot(x, fx)
+            # axd['upper left'].plot(x, fx)
             # Plotting the interpolated ideal function to get a nice line
-            axs[0].plot(
+            axd["upper left"].plot(
                 poly_plot_x,
                 poly_plot_y,
                 linewidth=1.2,
@@ -397,7 +404,7 @@ class FunctionFinder(FunctionFinderBaseClass):
             )
 
             # plotting all training data points.
-            axs[0].scatter(
+            axd["upper left"].scatter(
                 x,
                 y,
                 c=Colors.HIGHLIGHT_2.value,
@@ -410,20 +417,20 @@ class FunctionFinder(FunctionFinderBaseClass):
             # this is just to draw the edges in the same color
             # Earlier I experimented with some wilder colors and the
             # black borders looked awful. :)
-            for j in range(2):
-                axs[j].tick_params(
+            for a in axd:
+                axd[a].tick_params(
                     color=Colors.TEXT.value, labelcolor=Colors.TEXT.value
                 )
-                for spine in axs[j].spines.values():
+                for spine in axd[a].spines.values():
                     spine.set_edgecolor(Colors.TEXT.value)
 
-            axs[0].set_title(
+            axd["upper left"].set_title(
                 f"It's a match: $y_{f['train_y']}$ ❤ $y_{{ {f['best_ideal_y']} }}$",
                 color=Colors.TEXT.value,
             )
-            axs[0].set_xlabel("x", color=Colors.TEXT.value)
-            axs[0].set_ylabel("y", color=Colors.TEXT.value)
-            axs[0].legend()
+            axd["upper left"].set_xlabel("x", color=Colors.TEXT.value)
+            axd["upper left"].set_ylabel("y", color=Colors.TEXT.value)
+            axd["upper left"].legend()
 
             ###############################################################
             # Zoomed-in Plot
@@ -447,14 +454,15 @@ class FunctionFinder(FunctionFinderBaseClass):
             # the respective y value for every x to draw the error-lines in the next line.
             poly_plot_x, poly_plot_y, fx = self._fit_polynomial(x, y_ideal, degree=1)
 
-            self.plot_errors(axs[1], x, fx, y)
-            axs[1].set_title(
+            self.plot_errors(axd["lower left"], x, fx, y)
+            axd["lower left"].set_title(
                 f"zoomed-in view to {zoomed_in_view_value_count} values around $y=0$"
             )
-            axs[1].set_xlabel("x", color=Colors.TEXT.value)
-            axs[1].set_ylabel("y", color=Colors.TEXT.value)
-            # axs[1].plot(x, fx)
-            axs[1].plot(poly_plot_x, poly_plot_y, color=Colors.HIGHLIGHT.value)
+            axd["lower left"].set_xlabel("x", color=Colors.TEXT.value)
+            axd["lower left"].set_ylabel("y", color=Colors.TEXT.value)
+            axd["lower left"].plot(
+                poly_plot_x, poly_plot_y, color=Colors.HIGHLIGHT.value
+            )
 
             ###############################################################
             # Plotting the Test Data
@@ -474,7 +482,7 @@ class FunctionFinder(FunctionFinderBaseClass):
 
             # Plotting all test values in the first plot.
             # And coloring them according to their "mappability" to the resperctive function.
-            axs[0].scatter(x=tmp["x"], y=tmp["TEST_y"], color=col, alpha=0.5)
+            axd["upper left"].scatter(x=tmp["x"], y=tmp["TEST_y"], color=col, alpha=0.5)
 
             # Now select only the test data that fits in the selected zoomed-in interval
             tmp = tmp.loc[(tmp["x"] < x.max()) & (tmp["x"] > x.min())]
@@ -485,14 +493,14 @@ class FunctionFinder(FunctionFinderBaseClass):
             mappable = tmp.loc[tmp[mappapble_string]]
             n_mappable = tmp.loc[~tmp[mappapble_string]]
 
-            axs[1].scatter(
+            axd["lower left"].scatter(
                 x=mappable["x"],
                 y=mappable["TEST_y"],
                 color=Colors.MAPABLE.value,
                 label=f"mappable to $f_{{ {f['best_ideal_y']} }}$",
                 alpha=0.5,
             )
-            axs[1].scatter(
+            axd["lower left"].scatter(
                 x=n_mappable["x"],
                 y=n_mappable["TEST_y"],
                 color=Colors.NOT_MAPABLE.value,
@@ -501,9 +509,86 @@ class FunctionFinder(FunctionFinderBaseClass):
             )
 
             # Training Data
-            axs[1].scatter(
+            axd["lower left"].scatter(
                 x, y, c=Colors.HIGHLIGHT_2.value, zorder=100, label="training data"
             )
-            axs[1].legend()
+
+            ###############################################################
+            # Bar Charts
+            ###############################################################
+            functions_map = []
+            values_map = []
+            values_nmap = []
+            colors_map = []
+            colors_nmap = []
+
+            for it in self.__ideal_dict:
+                s = f"mappable_to_Train_{it['train_y']}_IDEAL_{it['best_ideal_y']}"
+                t = self.__merged_df.loc[self.__merged_df["TEST_y"].notnull()]
+
+                percentage_of_mappaple = t[s].value_counts(normalize=True)
+                values_map.append(percentage_of_mappaple[True] * 100)
+                values_nmap.append(percentage_of_mappaple[False] * 100)
+
+                functions_map.append(str(it["best_ideal_y"]))
+
+                is_current_value = f["best_ideal_y"] == it["best_ideal_y"]
+
+                colors_map.append(
+                    Colors.MAPABLE.value
+                    if is_current_value
+                    else Colors.MAPABLE_LIGHT.value
+                )
+                colors_nmap.append(
+                    Colors.NOT_MAPABLE.value
+                    if is_current_value
+                    else Colors.NOT_MAPABLE_LIGHT.value
+                )
+
+                # f"mappable_to_Train_{f['train_y']}_IDEAL_{f['best_ideal_y']}"
+
+            # Stacked bar chart
+            axd["right"].bar(
+                functions_map,
+                values_map,
+                color=colors_map,
+                # yerr=values1_std,
+                # ecolor="green",
+                # error_kw=dict(lw=2, capsize=2, capthick=2),
+            )
+
+            add_value_labels(axd["right"], functions_map)
+            axd["right"].bar(
+                functions_map, values_nmap, color=colors_nmap, bottom=values_map
+            )
+            axd["right"].set_title(
+                f"Mappable percentage of test\ndata to the ideal function",
+                color=Colors.TEXT.value,
+                fontsize=10,
+            )
+            axd["right"].axis("off")
+
+            ###############################################################
+            # Finalization
+            ###############################################################
+
+            axd["lower left"].legend()
             fig.tight_layout()
-            plt.savefig(save_path / f"T_{f['train_y']}-f_{f['best_ideal_y']}.png")
+            plt.savefig(save_path / f"T_{f['train_y']}-f_{f['best_ideal_y']}TMP.png")
+
+
+def add_value_labels(ax, ideal):
+    i = 0
+    for rect in ax.patches:
+        x_value = rect.get_x() + rect.get_width() / 2
+
+        ax.annotate(
+            f"$f_{{{ideal[i]}}}$",  # Use `label` as label
+            (x_value, 0),  # Place label at end of the bar
+            xytext=(0, 5),  # Vertically shift label by `space`
+            textcoords="offset points",  # Interpret `xytext` as offset in points
+            ha="center",  # Horizontally center label
+            va="bottom",
+        )  # Vertically align label differently for
+        i += 1
+        # positive and negative values.
