@@ -1,7 +1,14 @@
-import pandas as pd
+"""
+To run the tests just call: 
+$ pytest -s -v 
+in the projects root directory.
+"""
 
+import pandas as pd
+from numpy import nan as NaN, isnan
+from math import isclose
 from pathlib import Path
-from src.iu_project_1 import function_finder
+from src.iu_project_1 import function_finder, FunctionFinderBaseClass
 
 
 def test_function_finder_get_best_functions():
@@ -58,7 +65,7 @@ def test_function_finder_get_best_functions():
 
     # Initialize the Function Finder Class
     # It is possible to pass the dataframes directly or set them later
-    ff = function_finder.FunctionFinder()
+    ff = function_finder.FunctionFinder(test_mode=True)
     ff.ideal_set = ideal_df
     ff.train_set = train_df
 
@@ -72,7 +79,10 @@ def test_function_finder_get_best_functions():
 
 def test_function_finder_test_multiple_test_functions():
     """
-    Bitches
+    Basically the same test as above just with more training functions:
+    The following values are expected:
+    [{'train_y': 1, 'best_ideal_y': 2},
+    {'train_y': 2, 'best_ideal_y': 3}]
     """
 
     train_df = pd.DataFrame(
@@ -84,7 +94,9 @@ def test_function_finder_test_multiple_test_functions():
         columns=["x", "y1", "y2", "y3"],
     )
     print()
-    ff = function_finder.FunctionFinder(train_set=train_df, ideal_set=ideal_df)
+    ff = function_finder.FunctionFinder(
+        train_set=train_df, ideal_set=ideal_df, test_mode=True
+    )
 
     nina = ff.get_best_function()
 
@@ -98,50 +110,94 @@ def test_function_finder_test_multiple_test_functions():
     print(nina)
 
 
-def test_read_csv():
-    p = Path.cwd()
-    train_path = p / "tests" / "data" / "simple_train.csv"
-    ideal_path = p / "tests" / "data" / "simple_ideal.csv"
-
-    ff = function_finder.FunctionFinder(train_set=train_path, ideal_set=ideal_path)
-
-    nina = ff.get_best_function()
-
-    assert len(nina) == 3
-
-    assert nina[0]["train_y"] == 1
-    assert nina[0]["best_ideal_y"] == 1
-    assert nina[1]["train_y"] == 2
-    assert nina[1]["best_ideal_y"] == 6
-    assert nina[2]["train_y"] == 3
-    assert nina[2]["best_ideal_y"] == 8
-
-
-# TODO: !!!
-# Mehr gute Tests für test.csv
-
-
-def test_plot_best_function():
+def test_calculate_test_scores():
     """
-    Bitches
+    The ideal function is obviously y2.
+
+    Since sqrt(2) is very roughly equal to 1.4, I just check the
+    edge cases: The Deviation of Ideal 2 and Test 3.5 is 1.5 ==> Test Data is not mappable
+    A deviation of 1.4 is just below the cut-off value and is therefore mappable.
+
+    Not all x values have a corresponding test value.
+    In those cases the deviation is NaN and obviously not mappable.
+
+                                    || ---- Expected Result ----
+    TRAIN | ----IDEAL---- |  TEST   || mappable to df | deviation
+    x  y1 | x  y1  y2  y3 |  x  y   ||                |
+    1   2 | 1   1   2   4 |  -  -   ||     False      |   NaN
+    2   2 | 2   1   2   4 |  2 3.5  ||     False      |   1.5
+    3   2 | 3   1   2   4 |  3 3.4  ||     True       |   1.4
+    4   2 | 4   1   2   4 |  4 0.5  ||     False      |   1.5
+    5   2 | 5   1   2   4 |  5  2   ||     True       |    0
+    6   2 | 6   1   2   4 |  6 2.4  ||     True       |   0.4
     """
+    gold_df = pd.DataFrame(
+        {
+            "x": [1, 2, 3, 4, 5, 6],
+            "IDEAL_y2": [2, 2, 2, 2, 2, 2],
+            "test_deviation_to_Train_1_IDEAL_2": [NaN, 1.5, 1.4, 1.5, 0, 0.4],
+            "mappable_to_Train_1_IDEAL_2": [False, False, True, False, True, True],
+        },
+        columns=[
+            "x",
+            "IDEAL_y2",
+            "test_deviation_to_Train_1_IDEAL_2",
+            "mappable_to_Train_1_IDEAL_2",
+        ],
+    )
 
     train_df = pd.DataFrame(
-        [[2, 4], [3, 5], [5, 7], [7, 10], [9, 15]],
+        [[1, 2], [2, 2], [3, 2], [4, 2], [5, 2], [6, 2]],
         columns=["x", "y1"],
     )
     ideal_df = pd.DataFrame(
-        [[2, 4.1], [3, 4.8], [5, 7.4], [7, 10.01], [9, 15.345]],
-        columns=["x", "y1"],
+        [
+            [1, 1, 2, 4],
+            [2, 1, 2, 4],
+            [3, 1, 2, 4],
+            [4, 1, 2, 4],
+            [5, 1, 2, 4],
+            [6, 1, 2, 4],
+        ],
+        columns=["x", "y1", "y2", "y3"],
+    )
+    test_df = pd.DataFrame(
+        [[2, 3.5], [3, 3.4], [4, 0.5], [5, 2], [6, 2.4]],
+        columns=["x", "y"],
     )
 
-    p = Path.cwd()
-    train_path = p / "data" / "train.csv"
-    ideal_path = p / "data" / "ideal.csv"
-    test_path = p / "data" / "test.csv"
-
+    # Initialize the Function Finder Class
+    # It is possible to pass the dataframes directly or set them later
     ff = function_finder.FunctionFinder(
-        train_set=train_path, ideal_set=ideal_path, test_set=test_path
+        train_set=train_df, ideal_set=ideal_df, test_set=test_df, test_mode=True
     )
 
-    ff.plot_functions(Path.cwd() / "tests" / "plots")
+    ff._calculate_test_scores()
+    nina = ff.merged_df
+
+    assert nina is not None
+
+    print(nina.columns)
+    nina = nina[
+        [
+            "x",
+            "IDEAL_y2",
+            "test_deviation_to_Train_1_IDEAL_2",
+            "mappable_to_Train_1_IDEAL_2",
+        ]
+    ]
+
+    assert nina["mappable_to_Train_1_IDEAL_2"].equals(
+        nina["mappable_to_Train_1_IDEAL_2"]
+    )
+
+    # Due to rounding errors I can't use pandas built in functions
+    # for comparing floats:
+    for a, b in zip(
+        nina["test_deviation_to_Train_1_IDEAL_2"].values,
+        gold_df["test_deviation_to_Train_1_IDEAL_2"].values,
+    ):
+        if isnan(a):
+            assert isnan(b)
+        else:
+            assert isclose(a, b, rel_tol=1e-5)

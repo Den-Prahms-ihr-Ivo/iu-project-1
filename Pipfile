@@ -11,6 +11,8 @@ pandas = "*"
 pandas-stubs = "*"
 pyarrow = "*"
 matplotlib = "*"
+tomli = "*"
+scipy = "*"
 
 [dev-packages]
 pytest = "*"

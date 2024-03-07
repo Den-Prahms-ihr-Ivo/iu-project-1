@@ -3,17 +3,23 @@ popo
 """
 
 from pathlib import Path
-from abc import ABC, abstractmethod
 from typing import List, Dict, Literal, Optional, Union, Any, Tuple
-from src.iu_project_1.custom_exceptions import InvalidCallOrder, InvalidDataFrame
 from enum import Enum
 from math import sqrt
 from numpy.typing import ArrayLike
+
+from sqlalchemy import create_engine, Engine
+from sqlalchemy.types import Float as DB_Float
+from scipy.stats import norm
 
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 import re
+import tomli
+
+from src.iu_project_1.custom_exceptions import InvalidCallOrder, InvalidDataFrame
+from src.iu_project_1.function_finder_base import FunctionFinderBaseClass
 
 
 class Colors(Enum):
@@ -30,31 +36,18 @@ class Colors(Enum):
     TEXT = "#282119"
 
 
-class FunctionFinderBaseClass(ABC):
-    """
-    Since we have to use inheritance, and I feel like the SQLAlchemy inheritance
-    is cheating and I din't have a better idea, I just define all the outgoing
-    interface functions in the base class.
-    """
-
-    @abstractmethod
-    def get_best_function(
-        self,
-    ) -> List[Dict[Literal["train_y", "best_ideal_y"], int]]:
-        """
-        TODO
-        """
-
-    @abstractmethod
-    def plot_functions(self, save_path: Path) -> None:
-        """
-        TODO
-        """
-
-
 class FunctionFinder(FunctionFinderBaseClass):
     """
-    TODO
+    This Class handles all the functionality for the given assignment.
+
+    All three DataSets are attributes of this class.
+    As soon as all three DataSets are set, the desired calculations are performed and the data is automatically
+    saved to a sqllite database.
+    I decided to make the name and location of this database settable either via the config.toml or by passing
+    said information in the constructor.
+
+    Similarily the datasets can be either passed to the constructor or set later.
+    Either way, as soon as all necessary datasets have been set, the calculations are performed.
     """
 
     __train_df: Optional[pd.DataFrame] = None
@@ -62,14 +55,37 @@ class FunctionFinder(FunctionFinderBaseClass):
     __test_df: Optional[pd.DataFrame] = None
     __merged_df: Optional[pd.DataFrame] = None
     __ideal_dict: Optional[List[Dict[Literal["train_y", "best_ideal_y"], int]]] = None
+    __test_mode: False
+    config: Dict[str, Any] = {}
+    db_engine: Engine
 
     def __init__(
         self,
         train_set: Union[None, pd.DataFrame, Path] = None,
         ideal_set: Union[None, pd.DataFrame, Path] = None,
         test_set: Union[None, pd.DataFrame, Path] = None,
+        db_dir: Optional[Path] = None,
+        db_name: Optional[Path] = None,
+        test_mode: Optional[bool] = False,
     ):
         super(FunctionFinder, self).__init__()
+
+        self.__test_mode = test_mode
+
+        with open("config.toml", mode="rb") as f:
+            self.config = tomli.load(f)
+
+        if db_dir is None or db_name is None:
+            db_dir = Path(self.config["SQLALCHEMY_DATABASE"]["directory"])
+            db_name = self.config["SQLALCHEMY_DATABASE"]["name"]
+
+        if not db_dir.is_dir():
+            raise AttributeError("Given DB-Path is not a directory. :(")
+
+        db_dir = db_dir / (db_name + ".db")
+
+        if not test_mode:
+            self.db_engine = create_engine(f"sqlite:///{db_dir}", echo=True)
 
         if isinstance(train_set, Path):
             self.train_set = self._load_csv(train_set)
@@ -98,6 +114,9 @@ class FunctionFinder(FunctionFinderBaseClass):
         if df is None:
             return
 
+        if not self.__test_mode:
+            self._save_df_to_sql(df, "train")
+
         self.__train_df = df
         # TODO: sanity checks und so weiter
         # und mergen etc
@@ -116,6 +135,9 @@ class FunctionFinder(FunctionFinderBaseClass):
     def ideal_set(self, df: pd.DataFrame) -> None:
         if df is None:
             return
+
+        if not self.__test_mode:
+            self._save_df_to_sql(df, "ideal")
 
         if len([c for c in df.columns if re.search(r"^IDEAL_y\d+$", c)]) < 1:
             df = df.add_prefix("IDEAL_")
@@ -143,6 +165,21 @@ class FunctionFinder(FunctionFinderBaseClass):
 
         self.__test_df = df
         # TODO: sanity checks und so weiter
+
+    @property
+    def test_mode(self) -> bool:
+        return self.__test_mode
+
+    @test_mode.setter
+    def test_mode(self, test_mode: bool) -> bool:
+        self.__test_mode = test_mode
+
+    @property
+    def merged_df(self) -> Optional[pd.DataFrame]:
+        if self.__test_mode:
+            return self.__merged_df
+        else:
+            return None
 
     def _load_csv(self, file_path: Path) -> pd.DataFrame:
         if not file_path.is_file():
@@ -259,7 +296,7 @@ class FunctionFinder(FunctionFinderBaseClass):
 
             # Save the deviation between the test y value and the ideal y value
             self.__merged_df[
-                f"deviation_Train_{ideal['train_y']}_IDEAL_{ideal['best_ideal_y']}"
+                f"test_deviation_to_Train_{ideal['train_y']}_IDEAL_{ideal['best_ideal_y']}"
             ] = self.__merged_df.apply(
                 lambda row: abs(row[f"IDEAL_y{ideal['best_ideal_y']}"] - row["TEST_y"]),
                 axis=1,
@@ -274,7 +311,7 @@ class FunctionFinder(FunctionFinderBaseClass):
                 > abs(
                     maximum_regression_train_to_ideal
                     - row[
-                        f"deviation_Train_{ideal['train_y']}_IDEAL_{ideal['best_ideal_y']}"
+                        f"test_deviation_to_Train_{ideal['train_y']}_IDEAL_{ideal['best_ideal_y']}"
                     ]
                 ),
                 axis=1,
@@ -380,7 +417,7 @@ class FunctionFinder(FunctionFinderBaseClass):
 
             fig, axd = plt.subplot_mosaic(
                 [["upper left", "right"], ["lower left", "right"]],
-                figsize=(8, 8),
+                figsize=(10, 10),
                 gridspec_kw={"width_ratios": [2, 1], "height_ratios": [1, 1]},
                 layout="tight",
             )
@@ -521,14 +558,16 @@ class FunctionFinder(FunctionFinderBaseClass):
             values_nmap = []
             colors_map = []
             colors_nmap = []
+            percent_map = []
 
             for it in self.__ideal_dict:
                 s = f"mappable_to_Train_{it['train_y']}_IDEAL_{it['best_ideal_y']}"
                 t = self.__merged_df.loc[self.__merged_df["TEST_y"].notnull()]
+                percentage_of_mappaple = t[s].value_counts(normalize=False)
 
-                percentage_of_mappaple = t[s].value_counts(normalize=True)
-                values_map.append(percentage_of_mappaple[True] * 100)
-                values_nmap.append(percentage_of_mappaple[False] * 100)
+                values_map.append(percentage_of_mappaple[True])
+                values_nmap.append(percentage_of_mappaple[False])
+                percent_map.append(percentage_of_mappaple[True])
 
                 functions_map.append(str(it["best_ideal_y"]))
 
@@ -545,24 +584,19 @@ class FunctionFinder(FunctionFinderBaseClass):
                     else Colors.NOT_MAPABLE_LIGHT.value
                 )
 
-                # f"mappable_to_Train_{f['train_y']}_IDEAL_{f['best_ideal_y']}"
-
-            # Stacked bar chart
+            # Bar chart
             axd["right"].bar(
                 functions_map,
                 values_map,
                 color=colors_map,
-                # yerr=values1_std,
-                # ecolor="green",
-                # error_kw=dict(lw=2, capsize=2, capthick=2),
             )
 
-            add_value_labels(axd["right"], functions_map)
+            self._add_bar_labels(axd["right"], ideal=functions_map, percent=percent_map)
             axd["right"].bar(
                 functions_map, values_nmap, color=colors_nmap, bottom=values_map
             )
             axd["right"].set_title(
-                f"Mappable percentage of test\ndata to the ideal function",
+                "Mappable percentage of test\ndata to the ideal function",
                 color=Colors.TEXT.value,
                 fontsize=10,
             )
@@ -574,21 +608,108 @@ class FunctionFinder(FunctionFinderBaseClass):
 
             axd["lower left"].legend()
             fig.tight_layout()
-            plt.savefig(save_path / f"T_{f['train_y']}-f_{f['best_ideal_y']}TMP.png")
+            plt.savefig(save_path / f"T_{f['train_y']}-f_{f['best_ideal_y']}.png")
 
+    def _add_bar_labels(self, ax, ideal, percent):
+        """
+        Adds Labels to the bar chart.
 
-def add_value_labels(ax, ideal):
-    i = 0
-    for rect in ax.patches:
-        x_value = rect.get_x() + rect.get_width() / 2
+        :param ax: the subplot
+        :param ideal: a list of the indices of ideal functions
+        :param percent: a list of percentages to be displayed
+        """
+        assert len(ideal) == len(percent)
 
-        ax.annotate(
-            f"$f_{{{ideal[i]}}}$",  # Use `label` as label
-            (x_value, 0),  # Place label at end of the bar
-            xytext=(0, 5),  # Vertically shift label by `space`
-            textcoords="offset points",  # Interpret `xytext` as offset in points
-            ha="center",  # Horizontally center label
-            va="bottom",
-        )  # Vertically align label differently for
-        i += 1
-        # positive and negative values.
+        i = 0
+        for rect in ax.patches:
+            x_value = rect.get_x() + rect.get_width() / 2
+
+            ax.annotate(
+                f"$f_{{{ideal[i]}}}$\n$\\approx${round(percent[i])}%",
+                (x_value, 0),
+                xytext=(0, -30),
+                textcoords="offset points",
+                ha="center",
+                va="bottom",
+            )
+            i += 1
+
+    def _save_df_to_sql(self, df: pd.DataFrame, table_name: str) -> None:
+        """
+        Simple saves a pandas Dataframe to a sql database.
+        """
+        df.to_sql(
+            table_name,
+            self.db_engine,
+            if_exists="replace",
+            index=False,
+            chunksize=500,
+            dtype=DB_Float,
+        )
+
+    def save_test_data_to_sql(self) -> None:
+        """
+        This function calculates the deviation from the test data to the mappable ideal function
+        plots the results and saves them later to a sqllite database.
+        """
+        ideal_cols = [f"IDEAL_{ideal['best_ideal_y']}" for ideal in self.__ideal_dict]
+
+        df = pd.DataFrame(columns=["x", "y", "delta to ideal", "No. ideal func"])
+
+        for ideal in self.__ideal_dict:
+            ideal_cols.append(f"IDEAL_{ideal['best_ideal_y']}")
+
+            s = f"mappable_to_Train_{ideal['train_y']}_IDEAL_{ideal['best_ideal_y']}"
+            tmp_df = self.__merged_df.loc[self.__merged_df[s]]
+            tmp_df["delta to ideal"] = (
+                tmp_df["TEST_y"] - tmp_df[f"IDEAL_y{ideal['best_ideal_y']}"]
+            )
+            tmp_df["No. ideal func"] = ideal["best_ideal_y"]
+            tmp_df["y"] = tmp_df["TEST_y"]
+
+            df = pd.concat([df, tmp_df[df.columns]], ignore_index=True)
+
+        df = df.sort_values(by="x", ascending=True, na_position="first")
+
+        colors = ["green", "blue", "red", "black"]
+        fig, ax = plt.subplots(
+            figsize=(16, 9),
+        )
+        i = 0
+        for babo, v_df in df.groupby("No. ideal func"):
+            print(v_df.head())
+
+            x = np.arange(start=v_df["x"].min(), stop=v_df["x"].max() + 0.01, step=0.01)
+            y = norm.pdf(
+                x=x,
+                loc=v_df["delta to ideal"].mean(),
+                scale=v_df["delta to ideal"].std(),
+            )
+            print(v_df["delta to ideal"].std())
+
+            ax.plot(
+                x,
+                y,
+                label=f"Ideal Function No. {babo}",
+                color=colors[i],
+            )
+            i += 1
+            # ax.fill_between(x, y, alpha=0.2)
+
+        fig.suptitle("Normal distribution of standard deviation...", fontsize=20)
+        ax.set_title(
+            "...of mappable testdata to their corresponding ideal function", fontsize=16
+        )
+        ax.set_xlabel("Z-score", fontsize=16)
+        ax.set_ylabel("Probability density", fontsize=16)
+
+        ax.set_xlim(-3, 3)
+        ax.set_ylim(0, 0.6)
+        ax.set_yticks(np.arange(0, 0.7, 0.05)[1:-1])
+        ax.tick_params(axis="both", labelsize=16)
+
+        p = Path.cwd()
+        ax.legend()
+        fig.savefig(p / "tests" / "plots" / "std_of_mappable_data.png")
+
+        self._save_df_to_sql(df, table_name="delta_test")
