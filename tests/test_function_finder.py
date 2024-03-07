@@ -4,11 +4,11 @@ $ pytest -s -v
 in the projects root directory.
 """
 
-import pandas as pd
 from numpy import nan as NaN, isnan
 from math import isclose
-from pathlib import Path
-from src.iu_project_1 import function_finder, FunctionFinderBaseClass
+
+import pandas as pd
+from src.iu_project_1 import function_finder
 
 
 def test_function_finder_get_best_functions():
@@ -171,7 +171,7 @@ def test_calculate_test_scores():
     ff = function_finder.FunctionFinder(
         train_set=train_df, ideal_set=ideal_df, test_set=test_df, test_mode=True
     )
-
+    # pylint: disable=locally-disabled, protected-access
     ff._calculate_test_scores()
     nina = ff.merged_df
 

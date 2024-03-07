@@ -1,5 +1,14 @@
 """
-popo
+This Class handles all the functionality for the given assignment.
+
+All three DataSets are attributes of this class.
+As soon as all three DataSets are set, the desired calculations are performed and the data is automatically
+saved to a sqllite database.
+I decided to make the name and location of this database settable either via the config.toml or by passing
+said information in the constructor.
+
+Similarily the datasets can be either passed to the constructor or set later.
+Either way, as soon as all necessary datasets have been set, the calculations are performed.
 """
 
 from pathlib import Path
