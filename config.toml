@@ -1,0 +1,4 @@
+[SQLALCHEMY_DATABASE]
+directory="./db"
+name="IVOsDataBase"
+

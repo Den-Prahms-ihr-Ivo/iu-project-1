@@ -1,0 +1,23 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+nox = "*"
+black = "*"
+sqlalchemy = "*"
+pandas = "*"
+pandas-stubs = "*"
+pyarrow = "*"
+matplotlib = "*"
+tomli = "*"
+scipy = "*"
+
+[dev-packages]
+pytest = "*"
+flake8 = "*"
+mypy = "*"
+
+[requires]
+python_version = "3.9"
